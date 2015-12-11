@@ -132,14 +132,14 @@ func (p *Pool) open(driver, url string) (*Resource, error) {
 		}
 
 		// Add db resource
-		p.databases[key(driver, url)] = Resource{
+		p.databases[key(driver, url)] = &Resource{
 			DB:     db,
 			Driver: driver,
 			Url:    url,
 		}
 	}
 
-	return p.get(driver, url)
+	return p.get(driver, url), nil
 }
 
 func (p *Pool) get(driver, url string) *Resource {
