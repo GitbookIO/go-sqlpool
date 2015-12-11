@@ -26,6 +26,12 @@ type Pool struct {
 	conds     *condgroup.CondGroup
 }
 
+type Stats struct {
+	Total    int
+	Active   int
+	Inactive int
+}
+
 func NewPool(opts Opts) *Pool {
 	return &Pool{
 		opts:      opts,
@@ -74,6 +80,18 @@ func (p *Pool) Release(r *Resource) error {
 	}
 
 	return nil
+}
+
+func (p *Pool) Stats() Stats {
+	total := len(p.databases)
+	inactive := len(p.inactive)
+	active := total - inactive
+
+	return Stats{
+		Total:    total,
+		Active:   active,
+		Inactive: inactive,
+	}
 }
 
 func (p *Pool) acquire(r *Resource) {
