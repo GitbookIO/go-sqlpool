@@ -4,13 +4,15 @@ import (
 	"database/sql"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/GitbookIO/go-sqlpool/utils/condgroup"
 	"github.com/GitbookIO/go-sqlpool/utils/counter"
 )
 
 type Opts struct {
-	Max int
+	Max         int64
+	IdleTimeout int64
 
 	// Init functions
 	PreInit  func(driver, url string) error
@@ -50,7 +52,7 @@ type Resource struct {
 
 	// Private fields used to track resource usage
 	users      counter.Counter
-	lastActive int
+	lastActive int64
 }
 
 func (r *Resource) Key() string {
@@ -71,12 +73,40 @@ func (p *Pool) Acquire(driver, url string) (*Resource, error) {
 }
 
 func (p *Pool) Release(r *Resource) error {
-	// Update usage
+	// Update resource's usage
 	p.release(r)
 
 	// Mark as idle
 	if r.users.Value() == 0 {
 
+	}
+
+	return nil
+}
+
+// Cleanup removes old/inactive connections
+func (p *Pool) Cleanup() error {
+	// Write lock
+	p.rw.Lock()
+	defer p.rw.Unlock()
+
+	// Current timestamp
+	now := time.Now().Unix()
+
+	for key, resource := range p.inactive {
+		// Skip if still valid
+		if (now - p.opts.IdleTimeout) < resource.lastActive {
+			continue
+		}
+
+		// Remove from inactive list and databases
+		delete(p.databases, key)
+		delete(p.inactive, key)
+
+		// Close database
+		go func(r *Resource) {
+			p.cleanupResource(r)
+		}(resource)
 	}
 
 	return nil
@@ -94,12 +124,21 @@ func (p *Pool) Stats() Stats {
 	}
 }
 
+func (p *Pool) cleanupResource(r *Resource) {
+	// Close database
+	if err := r.DB.Close(); err != nil {
+		// TODO: log failure
+	}
+}
+
 func (p *Pool) acquire(r *Resource) {
 	r.users.Increment()
+	r.lastActive = time.Now().Unix()
 }
 
 func (p *Pool) release(r *Resource) {
 	r.users.Decrement()
+	r.lastActive = time.Now().Unix()
 }
 
 func (p *Pool) open(driver, url string) (*Resource, error) {
