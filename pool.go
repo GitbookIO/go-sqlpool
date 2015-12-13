@@ -78,7 +78,13 @@ func (p *Pool) Release(r *Resource) error {
 
 	// Mark as idle
 	if r.users.Value() == 0 {
+		p.rw.Lock()
+		p.inactive[r.Key()] = r
+		p.rw.Unlock()
 
+		// Do cleanup
+		// TODO: lazily
+		return p.Cleanup()
 	}
 
 	return nil
