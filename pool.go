@@ -90,6 +90,29 @@ func (p *Pool) Release(r *Resource) error {
 	return nil
 }
 
+func (p *Pool) Close() error {
+	return p.close(false)
+}
+
+func (p *Pool) ForceClose() error {
+	return p.close(true)
+}
+
+func (p *Pool) close(force bool) error {
+	p.rw.Lock()
+	defer p.rw.Unlock()
+
+	for key, resource := range p.databases {
+		// Exit if we're not force closing
+		if err := resource.DB.Close(); err != nil && !force {
+			return err
+		}
+		p.removeResource(key)
+	}
+
+	return nil
+}
+
 // Cleanup removes old/inactive connections
 func (p *Pool) Cleanup() error {
 	// Write lock
@@ -185,6 +208,11 @@ func (p *Pool) open(driver, url string) (*Resource, error) {
 	}
 
 	return p.get(driver, url), nil
+}
+
+func (p *Pool) removeResource(key string) {
+	delete(p.databases, key)
+	delete(p.inactive, key)
 }
 
 func (p *Pool) get(driver, url string) *Resource {
