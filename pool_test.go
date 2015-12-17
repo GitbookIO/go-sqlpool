@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -60,6 +61,57 @@ func TestPool(t *testing.T) {
 	if !(pool.Stats().Total == 0 && pool.Stats().Active == 0 && pool.Stats().Inactive == 0) {
 		t.Errorf("Not correctly closed / cleaned up")
 	}
+}
+
+func TestPoolParallel(t *testing.T) {
+	m := 10
+	n := 50
+	resources := make([]*Resource, n*m)
+	wg := sync.WaitGroup{}
+
+	// Pool
+	pool := NewPool(Opts{
+		Max:         10,
+		IdleTimeout: 30,
+
+		PreInit:  nil,
+		PostInit: nil,
+	})
+	// Build a group of DBs
+	dbs := make([]string, m)
+	for i, _ := range dbs {
+		dbs[i] = fmt.Sprintf("/tmp/sqlpool_test_%d.db", i)
+	}
+	// Remove DBs
+	for _, dbPath := range dbs {
+		os.Remove(dbPath)
+	}
+
+	// Get connections to same DB
+	for i := 0; i < n*m; i++ {
+		wg.Add(1)
+		go func(x int) {
+			defer wg.Done()
+
+			// Pick db
+			dbPath := dbs[x%m]
+
+			// Open DB
+			r, err := pool.Acquire("sqlite3", dbPath)
+			if err != nil {
+				t.Errorf("Failed to acquire DB: %s", err)
+			} else if r == nil {
+				t.Errorf("Resource should not be nil if err is nil")
+			} else {
+				pool.Release(r)
+			}
+			resources[x] = r
+		}(i)
+	}
+
+	wg.Wait()
+
+	t.Errorf("Resources: %+v", resources)
 }
 
 func sqlTest(db *sql.DB, t *testing.T) error {
