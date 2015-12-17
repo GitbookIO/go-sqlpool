@@ -203,11 +203,13 @@ func (p *Pool) open(driver, url string) (*Resource, error) {
 		}
 
 		// Add db resource
+		p.rw.Lock()
 		p.databases[key(driver, url)] = &Resource{
 			DB:     db,
 			Driver: driver,
 			Url:    url,
 		}
+		p.rw.Unlock()
 	}
 
 	return p.get(driver, url), nil
