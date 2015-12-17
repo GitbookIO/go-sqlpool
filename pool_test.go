@@ -111,7 +111,23 @@ func TestPoolParallel(t *testing.T) {
 
 	wg.Wait()
 
-	t.Errorf("Resources: %+v", resources)
+	// Ensure there are exactly M unique databases open
+	uniqueDBs := map[*Resource]bool{}
+	for _, resource := range resources {
+		uniqueDBs[resource] = true
+	}
+	if len(uniqueDBs) != m {
+		for resource, _ := range uniqueDBs {
+			t.Log(*resource)
+		}
+		t.Log(pool.Stats())
+		t.Errorf("Expected %d unique resources, instead have %d", m, len(uniqueDBs))
+	}
+
+	// Close
+	if err := pool.Close(); err != nil {
+		t.Errorf("Failed to close parallel pool: %s", err)
+	}
 }
 
 func sqlTest(db *sql.DB, t *testing.T) error {
