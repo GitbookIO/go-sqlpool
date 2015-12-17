@@ -2,6 +2,7 @@ package sqlpool
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -64,6 +65,8 @@ func (p *Pool) Acquire(driver, url string) (*Resource, error) {
 	resource, err := p.open(driver, url)
 	if err != nil {
 		return nil, err
+	} else if resource == nil {
+		return nil, fmt.Errorf("Failed to open %s://%s for an unknown reason", driver, url)
 	}
 
 	// Update resource's usage
