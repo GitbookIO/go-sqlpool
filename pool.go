@@ -7,8 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/GitbookIO/go-sqlpool/utils/condgroup"
-	"github.com/GitbookIO/go-sqlpool/utils/counter"
+	"github.com/GitbookIO/syncgroup"
 )
 
 type Opts struct {
@@ -26,7 +25,7 @@ type Pool struct {
 
 	databases map[string]*Resource
 	inactive  map[string]*Resource
-	conds     *condgroup.CondGroup
+	conds     *syncgroup.CondGroup
 }
 
 type Stats struct {
@@ -41,7 +40,7 @@ func NewPool(opts Opts) *Pool {
 		rw:        sync.RWMutex{},
 		databases: map[string]*Resource{},
 		inactive:  map[string]*Resource{},
-		conds:     condgroup.NewCondGroup(),
+		conds:     syncgroup.NewCondGroup(),
 	}
 }
 
@@ -52,7 +51,7 @@ type Resource struct {
 	Url    string
 
 	// Private fields used to track resource usage
-	users      counter.Counter
+	users      syncgroup.ActiveCounter
 	lastActive int64
 }
 
@@ -80,7 +79,7 @@ func (p *Pool) Release(r *Resource) error {
 	p.release(r)
 
 	// Mark as idle
-	if r.users.Value() == 0 {
+	if !r.users.IsActive() {
 		p.rw.Lock()
 		p.inactive[r.Key()] = r
 		p.rw.Unlock()
@@ -164,12 +163,12 @@ func (p *Pool) cleanupResource(r *Resource) {
 }
 
 func (p *Pool) acquire(r *Resource) {
-	r.users.Increment()
+	r.users.Inc()
 	r.lastActive = time.Now().Unix()
 }
 
 func (p *Pool) release(r *Resource) {
-	r.users.Decrement()
+	r.users.Dec()
 	r.lastActive = time.Now().Unix()
 }
 
